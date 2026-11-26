@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Evolution of Money: 2P Speed Quiz</title>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
   <style>
     :root {
       --bg: #f6efe2; --card: #fffdf9; --ink: #2b2118;
@@ -47,3 +47,266 @@
       background: #f5ece0; color: var(--ink); border: 2px solid var(--border);
       text-align: left; font-weight: 500; margin-top: 8px;
     }
+    .result-box {
+      padding: 16px; border-radius: 12px; text-align: center; margin-top: 12px;
+      border: 2px solid var(--border); background: #faf4ea;
+    }
+    .moves-big { font-size: 1.8rem; font-weight: 800; margin: 6px 0; }
+    .status-box {
+      text-align: center; padding: 24px 12px; background: #faf4ea;
+      border-radius: 12px; border: 2px dashed var(--border); font-weight: 600;
+    }
+    .rules {
+      font-size: 0.8rem; background: #f8f2e7; padding: 10px; border-radius: 8px;
+      margin-top: 14px; color: #5b4938; line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <h1>Evolution of Money</h1>
+  <div class="sub">From Barter to Bitcoin — 2-Player Board Quiz</div>
+
+  <div id="lobbyView">
+    <div class="status-box" id="matchStatus">
+      Connecting you to the game table...<br>
+      <small style="color:#665544; font-weight:400;">Ask Player 2 to scan the same QR code on the board!</small>
+    </div>
+    <button id="soloFallbackBtn" class="hidden">Play 2-Player on This Screen Instead</button>
+    <div class="rules">
+      <strong>Speed Movement Rules:</strong><br>
+      ⚡ Under 5s = <b>10 spaces</b> &nbsp;|&nbsp; ⏱️ 5–10s = <b>8 spaces</b><br>
+      🐢 10–15s = <b>4 spaces</b> &nbsp;|&nbsp; 🕰️ Over 15s = <b>3 spaces</b>
+    </div>
+  </div>
+
+  <div id="gameView" class="hidden">
+    <div class="scoreboard">
+      <div class="player-card" id="p1Card">
+        <div><strong>Player 1</strong></div>
+        <div>Space: <span id="p1Pos">0</span></div>
+      </div>
+      <div class="player-card" id="p2Card">
+        <div><strong>Player 2</strong></div>
+        <div>Space: <span id="p2Pos">0</span></div>
+      </div>
+    </div>
+
+    <div id="turnBanner" style="text-align:center; font-weight:800; margin-bottom:10px; color:var(--accent-dark);"></div>
+
+    <div id="questionArea">
+      <div class="timer-bar">
+        <span>Time: <span id="timerVal">0.0</span>s</span>
+        <span class="badge" id="potentialBadge">Reward: 10 spaces</span>
+      </div>
+      <div class="question" id="qText"></div>
+      <div id="optionsList"></div>
+    </div>
+
+    <div id="feedbackArea" class="result-box hidden">
+      <div id="feedbackTitle" style="font-weight:700;"></div>
+      <div class="moves-big" id="movesEarned"></div>
+      <div id="feedbackSub" style="font-size:0.9rem; color:#554433;"></div>
+      <button id="nextTurnBtn" class="hidden">Next Player's Turn →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const QUESTIONS = [
+  { q: "What is the biggest problem with the Barter System?", opts: ["Coins are too heavy", "Double coincidence of wants", "Internet failure", "Paper tears easily"], a: 1 },
+  { q: "Which items were used as money in early Barter Villages?", opts: ["Plastic cards", "Grain, cattle & shells", "QR codes", "Paper cheques"], a: 1 },
+  { q: "Why did societies switch from barter to metal coins?", opts: ["Metals were durable & divisible", "Metals grew on trees", "Paper wasn't invented yet", "To use ATMs"], a: 0 },
+  { q: "Early coins got their value mainly from:", opts: ["The king's signature", "The precious metal inside (gold/silver)", "Serial numbers", "Bank apps"], a: 1 },
+  { q: "Why was paper money introduced instead of carrying lots of coins?", opts: ["Paper is lighter for large trade", "Gold stopped existing", "Coins were illegal", "Paper lasts longer in rain"], a: 0 },
+  { q: "What role does a Bank play in the evolution of money?", opts: ["Grows crops for barter", "Safely stores money & issues credit", "Mines Bitcoin physically", "Prints board games"], a: 1 },
+  { q: "How do Debit Cards work?", opts: ["Borrow money from friends", "Spend money directly from your bank account", "Trade grain digitally", "Work without any bank"], a: 1 },
+  { q: "What does UPI stand for in India?", opts: ["Unified Payments Interface", "Universal Paper India", "United Price Index", "Unique Payment ID"], a: 0 },
+  { q: "What do you scan at a shop to make an instant UPI payment?", opts: ["Barcode on grain", "QR Code", "Gold coin", "Passbook"], a: 1 },
+  { q: "What makes Bitcoin different from regular Rupee notes?", opts: ["It is decentralized digital crypto", "It is made of silver", "It is printed by local banks", "It requires barter"], a: 0 },
+  { q: "What technology records all Bitcoin transactions securely?", opts: ["Blockchain", "Paper ledger", "Passbook printer", "Barter register"], a: 0 },
+  { q: "Arrange the evolution of money in the right order:", opts: ["Coins → Barter → UPI → Paper", "Barter → Coins → Paper/Cards → Digital/Crypto", "Crypto → Paper → Coins → Barter", "Cards → Barter → Coins → UPI"], a: 1 }
+];
+
+const $ = id => document.getElementById(id);
+let peer = null, conn = null, myPlayer = 1, passAndPlay = false;
+let state = { turn: 1, p1Pos: 0, p2Pos: 0, qIndex: 0 };
+let startTime = 0, timerInterval = null;
+
+function getSpacesForSeconds(sec) {
+  if (sec <= 5) return 10;
+  if (sec <= 10) return 8;
+  if (sec <= 15) return 4;
+  return 3;
+}
+
+function getRoomId() {
+  const raw = (location.hostname + location.pathname).replace(/[^a-zA-Z0-9]/g, "");
+  return "evo-money-" + (raw.slice(-16) || "defaultroom");
+}
+
+function initPeer() {
+  if (typeof Peer === "undefined") {
+    $("matchStatus").innerHTML = "Online pairing library didn't load on this network.";
+    $("soloFallbackBtn").classList.remove("hidden");
+    return;
+  }
+
+  try {
+    peer = new Peer(getRoomId());
+    peer.on("open", () => {
+      myPlayer = 1;
+      $("matchStatus").innerHTML = "🟢 You are <b>Player 1</b>!<br><br>Waiting for <b>Player 2</b> to scan the QR code...";
+      $("soloFallbackBtn").classList.remove("hidden");
+    });
+    peer.on("connection", (connection) => {
+      conn = connection;
+      setupConnection();
+      conn.on("open", () => {
+        startGame();
+        sendSync();
+      });
+    });
+    peer.on("error", (err) => {
+      if (err && err.type === "unavailable-id") {
+        myPlayer = 2;
+        $("matchStatus").innerHTML = "🟡 Joining <b>Player 1</b>'s game...";
+        peer = new Peer();
+        peer.on("open", () => {
+          conn = peer.connect(getRoomId());
+          setupConnection();
+        });
+        peer.on("error", () => {
+          $("matchStatus").innerHTML = "Could not connect to Player 1.";
+          $("soloFallbackBtn").classList.remove("hidden");
+        });
+      } else {
+        $("matchStatus").innerHTML = "Online pairing unavailable on this network.";
+        $("soloFallbackBtn").classList.remove("hidden");
+      }
+    });
+  } catch (e) {
+    $("matchStatus").innerHTML = "Could not start online room.";
+    $("soloFallbackBtn").classList.remove("hidden");
+  }
+}
+
+$("soloFallbackBtn").onclick = () => {
+  passAndPlay = true;
+  startGame();
+};
+
+function setupConnection() {
+  conn.on("data", (msg) => {
+    if (msg.type === "SYNC") {
+      state = msg.state;
+      startGame();
+      renderTurn();
+    } else if (msg.type === "ANSWER_RESULT") {
+      state = msg.state;
+      showResult(msg.correct, msg.elapsed, msg.spaces, msg.who);
+    }
+  });
+}
+
+function sendSync() {
+  if (conn && conn.open) conn.send({ type: "SYNC", state });
+}
+
+function startGame() {
+  $("lobbyView").classList.add("hidden");
+  $("gameView").classList.remove("hidden");
+  renderTurn();
+}
+
+function renderTurn() {
+  clearInterval(timerInterval);
+  $("p1Pos").textContent = state.p1Pos;
+  $("p2Pos").textContent = state.p2Pos;
+  $("p1Card").classList.toggle("active", state.turn === 1);
+  $("p2Card").classList.toggle("active", state.turn === 2);
+  $("feedbackArea").classList.add("hidden");
+
+  const activeActor = passAndPlay ? state.turn : myPlayer;
+  const isMyTurn = passAndPlay || (state.turn === myPlayer);
+
+  $("turnBanner").textContent = isMyTurn
+    ? `🟢 PLAYER ${state.turn}'S TURN — Answer fast!`
+    : `⏳ Waiting for Player ${state.turn} to answer...`;
+
+  if (!isMyTurn) {
+    $("questionArea").classList.add("hidden");
+    return;
+  }
+
+  $("questionArea").classList.remove("hidden");
+  const item = QUESTIONS[state.qIndex % QUESTIONS.length];
+  $("qText").textContent = `Q${state.qIndex + 1}: ${item.q}`;
+  $("optionsList").innerHTML = "";
+
+  item.opts.forEach((opt, idx) => {
+    const btn = document.createElement("button");
+    btn.className = "opt-btn";
+    btn.textContent = opt;
+    btn.onclick = () => submitAnswer(idx === item.a, activeActor);
+    $("optionsList").appendChild(btn);
+  });
+
+  startTime = performance.now();
+  timerInterval = setInterval(() => {
+    const elapsed = (performance.now() - startTime) / 1000;
+    $("timerVal").textContent = elapsed.toFixed(1);
+    const pot = getSpacesForSeconds(elapsed);
+    $("potentialBadge").textContent = `Reward: ${pot} spaces`;
+  }, 100);
+}
+
+function submitAnswer(correct, actor) {
+  clearInterval(timerInterval);
+  const elapsed = (performance.now() - startTime) / 1000;
+  const spaces = correct ? getSpacesForSeconds(elapsed) : 0;
+
+  if (actor === 1) state.p1Pos += spaces;
+  else state.p2Pos += spaces;
+
+  showResult(correct, elapsed, spaces, actor);
+  if (!passAndPlay && conn && conn.open) {
+    conn.send({ type: "ANSWER_RESULT", state, correct, elapsed, spaces, who: actor });
+  }
+}
+
+function showResult(correct, elapsed, spaces, who) {
+  $("questionArea").classList.add("hidden");
+  $("feedbackArea").classList.remove("hidden");
+  $("p1Pos").textContent = state.p1Pos;
+  $("p2Pos").textContent = state.p2Pos;
+
+  if (correct) {
+    $("feedbackTitle").textContent = `✅ Player ${who} answered right in ${elapsed.toFixed(1)}s!`;
+    $("feedbackTitle").style.color = "var(--green)";
+    $("movesEarned").textContent = `Move ${spaces} Spaces!`;
+    $("feedbackSub").textContent = `Move Player ${who}'s piece to Space #${who === 1 ? state.p1Pos : state.p2Pos}.`;
+  } else {
+    $("feedbackTitle").textContent = `❌ Player ${who} got it wrong (${elapsed.toFixed(1)}s)`;
+    $("feedbackTitle").style.color = "var(--red)";
+    $("movesEarned").textContent = `Move 0 Spaces`;
+    $("feedbackSub").textContent = `Stay on your current space!`;
+  }
+
+  if (passAndPlay || who === myPlayer) {
+    $("nextTurnBtn").classList.remove("hidden");
+    $("nextTurnBtn").onclick = () => {
+      state.turn = state.turn === 1 ? 2 : 1;
+      state.qIndex += 1;
+      sendSync();
+      renderTurn();
+    };
+  } else {
+    $("nextTurnBtn").classList.add("hidden");
+  }
+}
+
+window.addEventListener("DOMContentLoaded", initPeer);
+</script>
+</body>
+</html>
