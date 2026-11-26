@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Evolution of Money: 2P Speed Quiz</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6efe2; --card: #fffdf9; --ink: #2b2118;
+      --accent: #c86d2d; --accent-dark: #9c4f19;
+      --green: #2e7d32; --red: #c62828; --border: #d9c7ad;
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+      display: flex; justify-content: center; min-height: 100vh;
+    }
+    .app {
+      width: 100%; max-width: 520px; background: var(--card);
+      border: 2px solid var(--border); border-radius: 16px; padding: 20px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 6px; text-align: center; color: var(--accent-dark); }
+    .sub { text-align: center; font-size: 0.88rem; color: #665544; margin-bottom: 18px; }
+    .hidden { display: none !important; }
+    button {
+      width: 100%; padding: 14px; border: none; border-radius: 10px;
+      background: var(--accent); color: #fff; font-size: 1rem; font-weight: 700;
+      cursor: pointer; margin-top: 10px;
+    }
+    button:hover { background: var(--accent-dark); }
+    .scoreboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .player-card {
+      padding: 10px; border-radius: 10px; border: 2px solid var(--border);
+      text-align: center; background: #faf4ea;
+    }
+    .player-card.active { border-color: var(--accent); background: #fff3e0; }
+    .timer-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      background: #eee3d0; padding: 10px 14px; border-radius: 10px;
+      font-weight: 700; margin-bottom: 14px;
+    }
+    .badge { padding: 4px 10px; border-radius: 999px; font-size: 0.82rem; background: var(--accent); color: #fff; }
+    .question { font-size: 1.1rem; font-weight: 700; margin-bottom: 14px; line-height: 1.4; }
+    .opt-btn {
+      background: #f5ece0; color: var(--ink); border: 2px solid var(--border);
+      text-align: left; font-weight: 500; margin-top: 8px;
+    }
